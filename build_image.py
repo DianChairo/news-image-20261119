@@ -1,224 +1,160 @@
 #!/usr/bin/env python3
-"""Render a 1024x1024 editorial front page summing up Thursday 19 November 2026.
+"""Draw the 19 November 2026 front page: one image, six stories.
 
-Pure Pillow shapes and text -- no photos, no network, no randomness, no
-timestamps. Running this script always produces the same bytes.
+Pure Pillow shapes and text, no photos, no network. Renders entry.png
+at 1024x1024 in the same directory as this script.
 """
-
-import textwrap
-from dataclasses import dataclass
 
 from PIL import Image, ImageDraw, ImageFont
 
-FONT_DIR = "/usr/share/fonts/truetype/dejavu/"
+W, H = 1024, 1024
 
-# Palette: deep teal + amber + cream.
-TEAL_DARK = (9, 58, 62)
-TEAL = (14, 92, 96)
-TEAL_LIGHT = (31, 128, 133)
-AMBER = (233, 163, 44)
-AMBER_SOFT = (246, 201, 107)
-CREAM = (250, 244, 228)
-CREAM_DIM = (238, 229, 206)
-INK = (24, 34, 33)
+CREAM = (251, 243, 220)
+CARD = (255, 249, 232)
+TEAL = (12, 79, 74)
+TEAL_DARK = (9, 62, 58)
+AMBER = (242, 160, 7)
+INK = (26, 26, 24)
+BODY = (74, 74, 66)
+MUTED = (120, 110, 92)
 WHITE = (255, 255, 255)
-TEAL_PALE = (206, 230, 228)
+TEAL_LINE = (12, 79, 74)
 
-WIDTH = 1024
-HEIGHT = 1024
-
-
-@dataclass(frozen=True)
-class Story:
-    kicker: str
-    headline: str
-    body: str
-    accent: tuple
+SANS = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+SANS_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 
 
-STORIES = [
-    Story(
-        kicker="DIPLOMACY  /  ASIA",
-        headline="Trump, Xi and Putin hold first trilateral summit in Shenzhen",
-        body="The three leaders meet on the APEC sidelines, with nuclear arms, "
-        "Ukraine and Iran on the table; no deal is expected.",
-        accent=AMBER,
-    ),
-    Story(
-        kicker="GULF  /  WAR",
-        headline="Iran widens attacks on US bases in Kuwait and Bahrain",
-        body="Tehran targets a US air base in Kuwait and sites in Bahrain "
-        "after US strikes on Qeshm Island.",
-        accent=AMBER,
-    ),
-    Story(
-        kicker="CULTURE  /  GAMING",
-        headline="GTA VI begins global rollout after 13-year wait",
-        body="Rockstar's game unlocks at midnight around the world, starting "
-        "in New Zealand; pre-orders top $1.5 billion.",
-        accent=TEAL_LIGHT,
-    ),
-    Story(
-        kicker="USA  /  POLITICS",
-        headline="Democrats nominate Jeffries for Speaker",
-        body="House Democrats pick Hakeem Jeffries 251-11; a January floor "
-        "vote would make him the first Black Speaker.",
-        accent=TEAL_LIGHT,
-    ),
-    Story(
-        kicker="SPACE  /  SCIENCE",
-        headline="Voyager 1 is one light-day from Earth",
-        body="NASA confirms the 1977 probe has reached 16 billion miles; a "
-        "radio signal now takes a full day to reach it.",
-        accent=AMBER,
-    ),
-    Story(
-        kicker="WEATHER  /  INDIA",
-        headline="Cyclone Akvan bears down on India's east coast",
-        body="The storm strengthens toward very severe as it nears Andhra "
-        "Pradesh and Odisha.",
-        accent=AMBER_SOFT,
-    ),
-]
+def font(path, size):
+    return ImageFont.truetype(path, size)
 
 
-def load(size, bold=False):
-    name = "DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf"
-    return ImageFont.truetype(FONT_DIR + name, size)
-
-
-def wrap_text(draw, text, font, max_width):
-    """Greedy word wrap using the real rendered width of each candidate line."""
-    words = text.split()
-    lines = []
-    current = ""
-    for word in words:
-        trial = (current + " " + word).strip()
-        if draw.textlength(trial, font=font) <= max_width:
-            current = trial
+def wrap(draw, text, fnt, max_width):
+    """Greedy word wrap returning a list of lines that fit max_width."""
+    lines, line = [], ""
+    for word in text.split():
+        trial = f"{line} {word}".strip()
+        if draw.textlength(trial, font=fnt) <= max_width:
+            line = trial
         else:
-            if current:
-                lines.append(current)
-            current = word
-    if current:
-        lines.append(current)
+            if line:
+                lines.append(line)
+            line = word
+    if line:
+        lines.append(line)
     return lines
 
 
-def draw_wrapped(draw, x, y, text, font, fill, max_width, leading):
-    lines = wrap_text(draw, text, font, max_width)
-    for line in lines:
-        draw.text((x, y), line, font=font, fill=fill)
+def draw_wrapped(draw, x, y, text, fnt, color, max_width, leading):
+    lines = wrap(draw, text, fnt, max_width)
+    for ln in lines:
+        draw.text((x, y), ln, font=fnt, fill=color)
         y += leading
     return y
 
 
-def draw_kicker(draw, x, y, story, font):
-    draw.text((x, y), story.kicker, font=font, fill=story.accent)
-    draw.rectangle([x, y + 22, x + 44, y + 26], fill=story.accent)
-
-
-def draw_lead(canvas, story, box):
-    """Full-width lead panel: big headline, amber rule, two-column body."""
-    x0, y0, x1, y1 = box
-    canvas.rectangle(box, fill=TEAL)
-    canvas.rectangle([x0, y0, x1, y0 + 4], fill=AMBER)
-    draw_kicker(canvas, x0 + 28, y0 + 24, story, load(19, bold=True))
-    y = draw_wrapped(
-        canvas, x0 + 28, y0 + 62, story.headline,
-        load(44, bold=True), WHITE, x1 - x0 - 56, 52,
-    )
-    canvas.rectangle([x0 + 28, y + 8, x0 + 72, y + 12], fill=AMBER)
-    draw_wrapped(
-        canvas, x0 + 28, y + 22, story.body,
-        load(21), CREAM, x1 - x0 - 56, 26,
-    )
-    canvas.text(
-        (x1 - 28, y0 + 24), "01", font=load(26, bold=True),
-        fill=AMBER_SOFT, anchor="ra",
-    )
-
-
-def draw_cell(canvas, story, box, number):
-    """One of the four middle grid cells on a cream card."""
-    x0, y0, x1, y1 = box
-    canvas.rounded_rectangle(box, radius=10, fill=CREAM, outline=TEAL_PALE, width=2)
-    canvas.rectangle([x0, y0, x0 + 6, y1], fill=story.accent)
-    draw_kicker(canvas, x0 + 24, y0 + 18, story, load(15, bold=True))
-    y = draw_wrapped(
-        canvas, x0 + 24, y0 + 50, story.headline,
-        load(25, bold=True), INK, x1 - x0 - 48, 31,
-    )
-    draw_wrapped(
-        canvas, x0 + 24, y + 6, story.body,
-        load(17), (58, 74, 72), x1 - x0 - 48, 23,
-    )
-    canvas.text(
-        (x1 - 44, y1 - 36), number, font=load(20, bold=True), fill=TEAL_LIGHT,
-    )
-
-
-def draw_strip(canvas, story, box):
-    """Full-width bottom strip: amber band with the final story."""
-    x0, y0, x1, y1 = box
-    canvas.rectangle(box, fill=AMBER)
-    canvas.rectangle([x0, y0, x1, y0 + 4], fill=TEAL_DARK)
-    canvas.text(
-        (x0 + 28, y0 + 16), story.kicker, font=load(16, bold=True), fill=TEAL_DARK,
-    )
-    canvas.text(
-        (x0 + 28, y0 + 42), story.headline, font=load(27, bold=True), fill=INK,
-    )
-    draw_wrapped(
-        canvas, x0 + 28, y0 + 84, story.body,
-        load(17), (58, 44, 8), x1 - x0 - 150, 22,
-    )
-    canvas.ellipse([x1 - 100, y0 + 26, x1 - 36, y0 + 90], outline=TEAL_DARK, width=3)
-    canvas.text((x1 - 78, y0 + 42), "06", font=load(24, bold=True), fill=TEAL_DARK)
-
-
-def render():
-    img = Image.new("RGB", (WIDTH, HEIGHT), CREAM)
-    draw = ImageDraw.Draw(img)
-
-    # Masthead.
-    draw.rectangle([0, 0, WIDTH, 118], fill=TEAL_DARK)
-    draw.rectangle([0, 118, WIDTH, 122], fill=AMBER)
-    draw.text((36, 18), "THE WORLD IN ONE PAGE", font=load(46, bold=True), fill=WHITE)
-    draw.text(
-        (36, 76), "THURSDAY 19 NOVEMBER 2026  |  SIX STORIES, ONE DAY",
-        font=load(18, bold=True), fill=AMBER_SOFT,
-    )
-    draw.text((WIDTH - 36, 76), "No. 323", font=load(18), fill=CREAM_DIM, anchor="ra")
-
-    # Lead story, full width.
-    draw_lead(draw, STORIES[0], (24, 140, WIDTH - 24, 392))
-
-    # Stories 2-5 in a two-column grid.
-    grid_top = 410
-    cell_w = (WIDTH - 24 * 2 - 16) // 2
-    cell_h = 218
-    for idx, story in enumerate(STORIES[1:5]):
-        col = idx % 2
-        row = idx // 2
-        x0 = 24 + col * (cell_w + 16)
-        y0 = grid_top + row * (cell_h + 16)
-        draw_cell(draw, story, (x0, y0, x0 + cell_w, y0 + cell_h), "0%d" % (idx + 2))
-
-    # Story 6 as a full-width bottom strip.
-    draw_strip(draw, STORIES[5], (24, 878, WIDTH - 24, 1000))
-
-    # Footer.
-    draw.text(
-        (36, 1006 - 4), "Compiled from verified reports  |  One image, six stories",
-        font=load(13), fill=(110, 122, 120),
-    )
-    return img
-
-
 def main():
-    image = render()
-    image.save("entry.png", format="PNG", optimize=True)
+    img = Image.new("RGB", (W, H), CREAM)
+    d = ImageDraw.Draw(img)
+
+    # ---- Masthead -------------------------------------------------------
+    d.rectangle([0, 0, W, 118], fill=TEAL)
+    title = font(SANS_BOLD, 52)
+    d.text((34, 26), "THE WORLD IN ONE PAGE", font=title, fill=WHITE)
+    sub = font(SANS_BOLD, 22)
+    d.text((34, 84), "THURSDAY 19 NOVEMBER 2026  |  SIX STORIES, ONE DAY",
+           font=sub, fill=AMBER)
+    issue = font(SANS, 22)
+    d.text((W - 34 - d.textlength("No. 323", font=issue), 84),
+           "No. 323", font=issue, fill=WHITE)
+    d.rectangle([0, 118, W, 124], fill=AMBER)
+
+    # ---- Lead story -----------------------------------------------------
+    d.rectangle([24, 138, 1000, 404], fill=TEAL)
+    d.rectangle([24, 138, 1000, 144], fill=AMBER)
+    kick = font(SANS_BOLD, 24)
+    d.text((52, 156), "DIPLOMACY  /  ASIA", font=kick, fill=AMBER)
+    num = font(SANS_BOLD, 34)
+    d.text((1000 - 52 - d.textlength("01", font=num), 150), "01",
+           font=num, fill=AMBER)
+    d.rectangle([52, 190, 98, 195], fill=AMBER)
+    head = font(SANS_BOLD, 46)
+    y = draw_wrapped(d, 52, 206,
+                     "Trump, Xi and Putin hold first trilateral summit in Shenzhen",
+                     head, WHITE, 920, 52)
+    d.rectangle([52, y + 8, 98, y + 13], fill=AMBER)
+    deck = font(SANS, 25)
+    draw_wrapped(d, 52, y + 24,
+                 "The three leaders meet on the APEC sidelines, with nuclear "
+                 "arms, Ukraine and Iran on the table; no deal is expected.",
+                 deck, WHITE, 920, 31)
+
+    # ---- Story grid -----------------------------------------------------
+    stories = [
+        ("GULF  /  WAR", AMBER,
+         "Iran widens attacks on US bases in Kuwait, Bahrain",
+         "Tehran hits US bases in Kuwait and Bahrain after US strikes "
+         "on Qeshm Island; Gulf defences intercept them.",
+         "02"),
+        ("CULTURE  /  GAMING", TEAL,
+         "GTA VI begins global rollout after 13-year wait",
+         "The game unlocks at midnight worldwide from New Zealand; "
+         "pre-orders top $1.5 billion.",
+         "03"),
+        ("USA  /  POLITICS", TEAL,
+         "Democrats nominate Jeffries for Speaker",
+         "House Democrats pick Jeffries 251-11; a January vote would "
+         "make him the first Black Speaker.",
+         "04"),
+        ("SPACE  /  SCIENCE", AMBER,
+         "Voyager 1 is one light-day from Earth",
+         "NASA confirms the 1977 probe is 16 billion miles out; its "
+         "signal now takes a full day.",
+         "05"),
+    ]
+    card_w, card_h = 476, 216
+    xs = [24, 524]
+    ys = [418, 648]
+    kick_f = font(SANS_BOLD, 21)
+    head_f = font(SANS_BOLD, 27)
+    body_f = font(SANS, 19)
+    num_f = font(SANS_BOLD, 28)
+    for i, (kicker, accent, headline, body, number) in enumerate(stories):
+        x, y = xs[i % 2], ys[i // 2]
+        d.rectangle([x, y, x + card_w, y + card_h], fill=CARD,
+                    outline=TEAL_LINE, width=2)
+        d.rectangle([x, y, x + 8, y + card_h], fill=accent)
+        tx = x + 26
+        d.text((tx, y + 14), kicker, font=kick_f, fill=accent)
+        d.rectangle([tx, y + 42, tx + 46, y + 47], fill=accent)
+        hy = draw_wrapped(d, tx, y + 54, headline, head_f, INK, 424, 35)
+        # Narrow body column so the corner number never collides with text.
+        draw_wrapped(d, tx, hy + 8, body, body_f, BODY, 360, 24)
+        d.text((x + card_w - 26 - d.textlength(number, font=num_f),
+                y + card_h - 38), number, font=num_f, fill=TEAL)
+
+    # ---- Bottom strip: cyclone ------------------------------------------
+    d.rectangle([24, 878, 1000, 984], fill=AMBER)
+    d.text((52, 890), "WEATHER  /  INDIA", font=kick_f, fill=TEAL_DARK)
+    storm = font(SANS_BOLD, 28)
+    d.text((52, 914), "Cyclone Akvan bears down on India's east coast",
+           font=storm, fill=INK)
+    storm_body = font(SANS, 21)
+    d.text((52, 950),
+           "Extremely heavy rain is forecast for Andhra Pradesh and Odisha on 19-20 Nov.",
+           font=storm_body, fill=(58, 44, 8))
+    d.ellipse([892, 896, 968, 972], outline=TEAL_DARK, width=4)
+    circ = font(SANS_BOLD, 34)
+    label = "06"
+    d.text((930 - d.textlength(label, font=circ) / 2, 914), label,
+           font=circ, fill=TEAL_DARK)
+
+    # ---- Footer ---------------------------------------------------------
+    foot = font(SANS, 19)
+    d.text((24, 994), "Compiled from verified reports  |  One image, six stories",
+           font=foot, fill=MUTED)
+
+    img.save("entry.png")
+    print("wrote entry.png", img.size)
 
 
 if __name__ == "__main__":
